@@ -9,7 +9,7 @@ getCellR <- function(u,res,cells,xlim,ylim){
 }
 
 init.data <- function(data=NA,M=NA,inits=NA){
-  data <- c(data$constants,data$capture) #restructure data list
+  data <- c(data$constants,data$capture,data$telemetry) #restructure data list
   J <- data$J
   K <- data$K
   xlim <- data$xlim
@@ -47,5 +47,17 @@ init.data <- function(data=NA,M=NA,inits=NA){
       s.init[i,] <- dSS[pick,]
     }
   }
-  return(list(y=y,z=z.init,s=s.init,N=sum(z.init)))
+  s.tel.init <- apply(data$u.tel,c(1,3),mean,na.rm=TRUE)
+  #move any initialized outside state space
+  for(i in 1:data$n.tel.inds){
+    s.cell.init <- getCellR(s.tel.init[i,],res,cells,xlim,ylim)
+    if(InSS[s.cell.init]==0){#not in SS, move to nearest cell
+      dists <- sqrt((dSS[s.cell.init,1]-dSS[,1])^2+(dSS[s.cell.init,2]-dSS[,2])^2)
+      dists[InSS==0] <- Inf
+      pick <- which(dists==min(dists))[1] #if more than 1, just use first
+      s.tel.init[i,] <- dSS[pick,]
+    }
+  }
+  
+  return(list(y=y,z=z.init,s=s.init,s.tel=s.tel.init,N=sum(z.init)))
 }

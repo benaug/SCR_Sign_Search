@@ -2,6 +2,10 @@
 #to do so, set rsf.beta1 to something other than 0
 #and don't supply Nimdata for rsf.beta1 to constrain it to 0 (what it is currently doing)
 
+#cells and traps should be set up so that traps (X) are at grid centroids of the cell they are in
+#this example is set up that way, be careful changing it.
+
+
 library(nimble) #data simulator uses nimble
 library(truncnorm) #required for data simulator
 source("sim.SCR.SignSearch.R")
@@ -11,9 +15,9 @@ library(RColorBrewer)
 cols1 <- brewer.pal(9,"Greens")
 
 #state space. Must start at (0,0)
-xlim <- c(0,100)
-ylim <- c(0,100)
-res <- 2.5 #resolution, cell width/height
+xlim <- c(0,75)
+ylim <- c(0,75)
+res <- 1.5 #resolution, cell width/height.
 if(xlim[1]!=0|ylim[1]!=0)stop("xlim and ylim must start at 0.")
 if((diff(range(xlim))/res)%%1!=0)stop("The range of xlim must be divisible by 'res'")
 if((diff(range(ylim))/res)%%1!=0)stop("The range of ylim must be divisible by 'res'")
@@ -54,24 +58,25 @@ image(x.vals,y.vals,matrix(tmp,n.cells.x,n.cells.y),main="D.cov",xlab="X",ylab="
 
 #make some traps. Really, we should put them in transect formation
 #but skipping that for now and spacing equally
-X <- as.matrix(expand.grid(seq(8.75,95,10),seq(8.75,95,10)))
+sigma.target <- 3 #expected sigma for spacing
+X <- as.matrix(expand.grid(seq(9.75,65.25,2*sigma.target),seq(9.75,65.25,2*sigma.target)))
 #remove any outside state space
 dists2 <- sqrt((X[,1]-center[1])^2+(X[,2]-center[2])^2)
-X <- X[dists2<rad,]
+rad2 <- rad - 2*sigma.target
+X <- X[dists2<rad2,]
 points(X,pch=4,lwd=2)
-
 J <- nrow(X)
 
-D.beta0 <- -4.5 #baseline D
+D.beta0 <- -4.25 #baseline D
 D.beta1 <- 1.0 #density coefficient 
 rsf.beta <- 0 #rsf coefficient (currently turned off)
-beta0.lam <- 3 #detection rate intercept
+beta0.lam <- 3.5 #detection rate intercept
 beta1.lam <- 1 #effort coefficient
 sigma <- 3 #spatial scale of availability distribution
 n.tel.inds <- 10 #number of telemetry individuals
 K.tel <- 15 #number of telemetry locations per individual
 
-set.seed(3244) #change this for new data set
+set.seed(32443) #change this for new data set
 
 E <- log(runif(J,0,1))
 lambda.detect <-  exp(beta0.lam + beta1.lam*E)
@@ -86,7 +91,7 @@ data <- sim.SCR.SignSearch(D.beta0=D.beta0,D.beta1=D.beta1,rsf.beta=rsf.beta,
 data$truth$lambda.N #expected abundance from D cov inputs
 data$truth$N #simulated realized abundance
 data$truth$n #number of inds captured
-table(rowSums(data$capture$y)) #number of inds captures X times
+table(rowSums(data$capture$y>0)) #number of inds captures X times (events not counts)
 
 #cells and locations of observatons
 str(data$capture$u.cell) #n x max(y)
@@ -115,7 +120,6 @@ for(i in 1:data$capture$n){
   }
 }
 
-
 ##Fit Model
 library(nimble)
 library(coda)
@@ -123,10 +127,10 @@ nimbleOptions(determinePredictiveNodesInModel = FALSE)
 source("init.data.R")
 source("NimbleModel SCR Sign Search.R")
 source("sSampler Dcov RSF.R")
-M <- 300 #data augmentation limit. Must be larger than simulated N. If N posterior hits M, need to raise M and try again.
+M <- 250 #data augmentation limit. Must be larger than simulated N. If N posterior hits M, need to raise M and try again.
 if(M<=data$truth$N)stop("Raise M to be larger than simulated N.")
 
-inits <- list(sigma=5) #needs to be set somewhere in the ballpark of truth
+inits <- list(sigma=4) #needs to be set somewhere in the ballpark of truth
 nimbuild <- init.data(data=data,inits=inits,M=M)
 
 Niminits <- list(z=nimbuild$z,N=nimbuild$N, #must init N to be sum(z.init)
@@ -135,7 +139,7 @@ Niminits <- list(z=nimbuild$z,N=nimbuild$N, #must init N to be sum(z.init)
                  sigma=inits$sigma,
                  beta0.lam=0,beta1.lam=0,
                  rsf.beta=2,
-                 s.tel=apply(data$telemetry$u.tel,c(1,3),mean,na.rm=TRUE))
+                 s.tel=nimbuild$s.tel)
 
 #constants for Nimble
 J <- nrow(X)
@@ -224,7 +228,7 @@ Cmcmc <- compileNimble(Rmcmc, project = Rmodel)
 
 # Run the model.
 start.time2 <- Sys.time()
-Cmcmc$run(2500,reset=FALSE) #can keep running this line to extend sampler
+Cmcmc$run(1500,reset=FALSE) #can keep running this line to extend sampler
 end.time <- Sys.time()
 end.time - start.time  # total time for compilation, replacing samplers, and fitting
 end.time - start.time2 # post-compilation run time
