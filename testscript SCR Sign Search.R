@@ -123,7 +123,7 @@ nimbleOptions(determinePredictiveNodesInModel = FALSE)
 source("init.data.R")
 source("NimbleModel SCR Sign Search.R")
 source("sSampler Dcov RSF.R")
-M <- 250 #data augmentation limit. Must be larger than simulated N. If N posterior hits M, need to raise M and try again.
+M <- 300 #data augmentation limit. Must be larger than simulated N. If N posterior hits M, need to raise M and try again.
 if(M<=data$truth$N)stop("Raise M to be larger than simulated N.")
 
 inits <- list(sigma=5) #needs to be set somewhere in the ballpark of truth
