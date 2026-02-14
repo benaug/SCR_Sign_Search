@@ -19,6 +19,7 @@ turn it back on.
 
 Individual expected detection rate at a trap is assumed to be proportional to the individual use probability of the cell containing trap.
 (perfect "compensatory heterogeneity").
+
 lam[i,j] <- lambda.detect[j]*use.dist[i,trap.to.cell[j]] #trap.to.cell maps traps to cells
 
 The model is also set up for supplemental telemetry data (not the same individuals beign detected). This can be turned off,
