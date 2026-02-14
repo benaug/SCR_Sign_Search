@@ -22,6 +22,13 @@ Individual expected detection rate at a trap is assumed to be proportional to th
 
 lam[i,j] <- lambda.detect[j]*use.dist[i,trap.to.cell[j]] #trap.to.cell maps traps to cells
 
+where lambda.detect[j] is a function of (log-transformed) effort
+
+for(j in 1:J){
+  log(lambda.detect[j]) <- beta0.lam + beta1.lam*E[j]
+}
+
+
 The model is also set up for supplemental telemetry data (not the same individuals beign detected). This can be turned off,
 or telemetry from the individuals being detected can be included.
 
