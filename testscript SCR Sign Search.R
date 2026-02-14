@@ -5,7 +5,7 @@
 #cells and traps should be set up so that traps (X) are at grid centroids of the cell they are in
 #this example is set up that way, be careful changing it.
 
-
+library(viridisLite) #for plot colors
 library(nimble) #data simulator uses nimble
 library(truncnorm) #required for data simulator
 source("sim.SCR.SignSearch.R")
