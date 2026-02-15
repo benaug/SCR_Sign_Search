@@ -52,11 +52,13 @@ sim.SCR.SignSearch <-
       use.dist[i,] <- use.dist[i,]/sum(use.dist[i,])
     }
     
-    #map traps to cells
+    #map detectors to cells
     J <- nrow(X)
-    trap.to.cell <- rep(NA,J)
+    detector.to.cell <- rep(0,J)
+    cell.to.detector <- rep(0,n.cells) #using 0 to indicate NA so we don't get warning compiling nimble model
     for(j in 1:J){
-      trap.to.cell[j] <- getCell(X[j,],res=res,cells=cells,xlim=xlim,ylim=ylim)
+      detector.to.cell[j] <- getCell(X[j,],res=res,cells=cells,xlim=xlim,ylim=ylim)
+      cell.to.detector[detector.to.cell[j]] <- j
     }
     
     #simulate cell-level detection
@@ -64,7 +66,7 @@ sim.SCR.SignSearch <-
     y <- matrix(NA,N,J)
     for(i in 1:N){
       for(j in 1:J){
-        lam <- lambda.detect[j]*use.dist[i,trap.to.cell[j]] #use.dist evaluated at cell trap j is in
+        lam <- lambda.detect[j]*use.dist[i,detector.to.cell[j]] #use.dist evaluated at cell detector j is in
         y[i,j] <- rpois(1,lam)
       }
     }
@@ -78,7 +80,7 @@ sim.SCR.SignSearch <-
       if(n.u.ind[i]>0){
         this.j[i,1:n.u.ind[i]] <- rep(which(y[i,]>0),times=y[i,which(y[i,]>0)])
         for(l in 1:n.u.ind[i]){
-          u.cell[i,l] <- trap.to.cell[this.j[i,l]] #cell this trap is in
+          u.cell[i,l] <- detector.to.cell[this.j[i,l]] #cell this detector is in
           u.xlim <- dSS[u.cell[i,l],1] + c(-res,res)/2
           u.ylim <- dSS[u.cell[i,l],2] + c(-res,res)/2
           u[i,l,1] <- rtruncnorm(1,a=u.xlim[1],b=u.xlim[2],
@@ -177,7 +179,7 @@ sim.SCR.SignSearch <-
     n.u.ind.obs <- n.u.ind[caught]
     
     constants <- list(X=X,J=J,K.tel=K.tel,xlim=xlim,ylim=ylim,dSS=dSS,res=res,cells=cells,x.vals=x.vals,y.vals=y.vals,
-                      n.tel.inds=n.tel.inds,n.locs.ind=n.locs.ind,trap.to.cell=trap.to.cell,
+                      n.tel.inds=n.tel.inds,n.locs.ind=n.locs.ind,detector.to.cell=detector.to.cell,cell.to.detector=cell.to.detector,
                       InSS=InSS,n.cells=n.cells,n.cells.x=n.cells.x,n.cells.y=n.cells.y,D.cov=D.cov,rsf.cov=rsf.cov,
                       E=E)
     truth <- list(lambda.N=lambda.N,lambda.cell=lambda.cell,rsf=rsf,N=N,s=s,s.cell=s.cell,

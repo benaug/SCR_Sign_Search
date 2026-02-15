@@ -1,3 +1,80 @@
+getPosCells <- nimbleFunction(
+  run = function(avail.dist=double(1),InSS.cells=double(1),det.cells=double(1),n.det=integer(0)){
+    returnType(double(1))
+    n.InSS.cells <- nimDim(InSS.cells)[1]
+    pos.cells <- rep(0,n.InSS.cells)
+    idx <- 1
+    #1) baseline trimming
+    for(c in 1:n.InSS.cells){
+      #sets level of trimming used to get use distribution and calculate y marginal logprobs
+      if(avail.dist[InSS.cells[c]]>1e-5){ #not effectively zero
+        pos.cells[idx] <- InSS.cells[c]
+        idx <- idx + 1
+      }
+    }
+    #2) force detection cells to be included
+    if(n.det>0){
+      for(l in 1:n.det){
+        this.det <- det.cells[l]
+        already <- 0
+        for(c in 1:(idx-1)){
+          if(pos.cells[c] == this.det){
+            already <- 1
+          }
+        }
+        if(already == 0){ #if not already in, stick it in first empty slot
+          pos.cells[idx] <- this.det
+          idx <- idx + 1
+        }
+      }
+    }
+    return(pos.cells)
+  }
+)
+
+getNPosCells <- nimbleFunction(
+  run = function(pos.cells=double(1)) {
+    returnType(integer(0))
+    n.pos.cells <- sum(pos.cells>0)
+    return(n.pos.cells)
+  }
+)
+
+dObs <- nimbleFunction(
+  run = function(x = double(1),pos.cells = double(1),n.pos.cells = integer(0),
+                 cell.to.detector = double(1),lambda.detect = double(1),
+                 use.dist = double(1), z = integer(0), log = integer(0)) {
+    returnType(double(0))
+    logProb <- 0
+    if(z==1){
+      for(c in 1:n.pos.cells){#loop over cells with nonnegligible use
+        this.cell <- pos.cells[c]
+        this.detector <- cell.to.detector[this.cell]
+        if(this.detector>0){ #cell surveyed (is a detector cell)
+          lam <- lambda.detect[this.detector]*use.dist[this.cell] #detection rate proportional to cell use
+          logProb <- logProb + dpois(x[this.detector],lam,log=TRUE)
+        }
+      }
+    }else{
+      if(sum(x)>0){ #need this so z is not turned off if samples allocated to individual (never occurs with all known IDs)
+        logProb <- -Inf
+      }
+    }
+    return(logProb)
+  })
+
+#make dummy random vector generator to make nimble happy
+rObs <- nimbleFunction(
+  run = function(n = integer(0), pos.cells = double(1),n.pos.cells = integer(0),
+                 cell.to.detector = double(1),lambda.detect = double(1),
+                 use.dist = double(1), z = integer(0)) {
+    returnType(double(1))
+    J <- nimDim(lambda.detect)[1]
+    out <- numeric(J,value=0)
+    return(out)
+  }
+)
+
 dPoissonVector <- nimbleFunction(
   run = function(x = double(1), lambda = double(1), z = double(0),
                  log = integer(0)) {
@@ -102,7 +179,34 @@ getAvail <- nimbleFunction(
   }
 )
 
+# getUse <- nimbleFunction(
+#   run = function(rsf = double(1),avail.dist=double(1)) {
+#     returnType(double(1))
+#     use.dist <- rsf*avail.dist
+#     use.dist <- use.dist/sum(use.dist)
+#     return(use.dist)
+#   }
+# )
+
 getUse <- nimbleFunction(
+  run = function(rsf = double(1),avail.dist=double(1),pos.cells=double(1),n.pos.cells=double(0),n.cells=double(0)){
+    returnType(double(1))
+    use.dist <- rep(0,n.cells)
+    sum.dist <- 0
+    for(c in 1:n.pos.cells){
+      this.cell <- pos.cells[c]
+      use.dist[this.cell] <- rsf[this.cell]*avail.dist[this.cell]
+      sum.dist <- sum.dist + use.dist[this.cell]
+    }
+    for(c in 1:n.pos.cells){
+      this.cell <- pos.cells[c]
+      use.dist[this.cell] <- use.dist[this.cell]/sum.dist
+    }
+    return(use.dist)
+  }
+)
+
+getUseTel <- nimbleFunction(
   run = function(rsf = double(1),avail.dist=double(1)) {
     returnType(double(1))
     use.dist <- rsf*avail.dist

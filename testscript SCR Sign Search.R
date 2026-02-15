@@ -2,7 +2,7 @@
 #to do so, set rsf.beta1 to something other than 0
 #and don't supply Nimdata for rsf.beta1 to constrain it to 0 (what it is currently doing)
 
-#cells and traps should be set up so that traps (X) are at grid centroids of the cell they are in
+#cells and detectors should be set up so that detectors (X) are at grid centroids of the cell they are in
 #this example is set up that way, be careful changing it.
 
 library(viridisLite) #for plot colors
@@ -56,10 +56,20 @@ tmp <- D.cov
 tmp[InSS==0] <- -Inf
 image(x.vals,y.vals,matrix(tmp,n.cells.x,n.cells.y),main="D.cov",xlab="X",ylab="Y",col=cols1)
 
-#make some traps. Really, we should put them in transect formation
+#make some detectors. Really, we should put them in transect formation
 #but skipping that for now and spacing equally
 sigma.target <- 3 #expected sigma for spacing
+#X is only used for plotting and identifying cell numbers
 X <- as.matrix(expand.grid(seq(9.75,65.25,2*sigma.target),seq(9.75,65.25,2*sigma.target)))
+#for plots to look good, snap X to dSS
+for(j in 1:nrow(X)){
+  x.diffs <- abs(X[j,1]-x.vals)
+  pick <- which(x.diffs==min(x.diffs))
+  X[j,1] <- x.vals[pick]
+  y.diffs <- abs(X[j,2]-y.vals)
+  pick <- which(y.diffs==min(y.diffs))
+  X[j,2] <- y.vals[pick]
+}
 #remove any outside state space
 dists2 <- sqrt((X[,1]-center[1])^2+(X[,2]-center[2])^2)
 rad2 <- rad - 2*sigma.target
@@ -73,12 +83,12 @@ rsf.beta <- 0 #rsf coefficient (currently turned off)
 beta0.lam <- 3.5 #detection rate intercept
 beta1.lam <- 1 #effort coefficient
 sigma <- 3 #spatial scale of availability distribution
-n.tel.inds <- 10 #number of telemetry individuals
-K.tel <- 15 #number of telemetry locations per individual
+n.tel.inds <- 5 #number of telemetry individuals
+K.tel <- 10 #number of telemetry locations per individual
 
 set.seed(32443) #change this for new data set
 
-E <- log(runif(J,0,1))
+E <- log(runif(J,0,1)) #simulate detector effort in J searched cells (centroids in X)
 lambda.detect <-  exp(beta0.lam + beta1.lam*E)
 plot(lambda.detect~E)
 
@@ -96,8 +106,10 @@ table(rowSums(data$capture$y>0)) #number of inds captures X times (events not co
 #cells and locations of observatons
 str(data$capture$u.cell) #n x max(y)
 str(data$capture$u) #n x max(y) x 2
-#trap numbers of each location (for reference, using u.cell as data)
+#detector numbers of each location (for reference, using u.cell as data)
 str(data$truth$this.j) #n x max(y)
+#used in model instead of X
+data$constants$cell.to.detector #maps cells to detectors
 
 #crappy plot
 tmp <- rep(0,n.cells)
@@ -142,8 +154,16 @@ Niminits <- list(z=nimbuild$z,N=nimbuild$N, #must init N to be sum(z.init)
                  s.tel=nimbuild$s.tel)
 
 #constants for Nimble
-J <- nrow(X)
-constants <- list(M=M,J=J,trap.to.cell=data$constants$trap.to.cell,
+n.InSS.cells <- sum(InSS)
+InSS.cells <- which(InSS==1)
+max.det <- max(rowSums(data$capture$y>0))
+det.cells <- matrix(0,M,max.det)
+n.det <- rowSums(nimbuild$y>0)
+for(i in 1:data$capture$n){
+  #map detectors to cells
+  det.cells[i,1:n.det[i]] <- data$constants$detector.to.cell[which(data$capture$y[i,]>0)]
+}
+constants <- list(M=M,J=J,
                   n.cells=data$constants$n.cells,n.cells.x=data$constants$n.cells.x,
                   n.cells.y=data$constants$n.cells.y,res=data$constants$res,
                   x.vals=data$constants$x.vals,y.vals=data$constants$y.vals,
@@ -153,6 +173,9 @@ constants <- list(M=M,J=J,trap.to.cell=data$constants$trap.to.cell,
                   cellArea=data$constants$res^2,
                   u.xlim.tel=data$telemetry$u.xlim.tel,
                   u.ylim.tel=data$telemetry$u.ylim.tel,
+                  InSS.cells=InSS.cells,n.InSS.cells=n.InSS.cells,
+                  cell.to.detector=data$constants$cell.to.detector,
+                  det.cells=det.cells,n.det=n.det,max.det=max.det,
                   n=data$capture$n,n.u.ind=data$capture$n.u.ind) #indexing for detection locations inside cells
 
 #supply data to nimble
@@ -228,7 +251,7 @@ Cmcmc <- compileNimble(Rmcmc, project = Rmodel)
 
 # Run the model.
 start.time2 <- Sys.time()
-Cmcmc$run(1500,reset=FALSE) #can keep running this line to extend sampler
+Cmcmc$run(1000,reset=FALSE) #can keep running this line to extend sampler
 end.time <- Sys.time()
 end.time - start.time  # total time for compilation, replacing samplers, and fitting
 end.time - start.time2 # post-compilation run time
