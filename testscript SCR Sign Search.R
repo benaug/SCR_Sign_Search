@@ -86,7 +86,7 @@ sigma <- 3 #spatial scale of availability distribution
 n.tel.inds <- 5 #number of telemetry individuals
 K.tel <- 10 #number of telemetry locations per individual
 
-set.seed(32443) #change this for new data set
+set.seed(32444) #change this for new data set
 
 E <- log(runif(J,0,1)) #simulate detector effort in J searched cells (centroids in X)
 lambda.detect <-  exp(beta0.lam + beta1.lam*E)
