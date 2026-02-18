@@ -90,7 +90,7 @@ set.seed(32444) #change this for new data set
 
 E <- log(runif(J,0,1)) #simulate detector effort in J searched cells (centroids in X)
 lambda.detect <-  exp(beta0.lam + beta1.lam*E)
-plot(lambda.detect~E)
+plot(lambda.detect~exp(E)) #plot is function of linear effort
 
 data <- sim.SCR.SignSearch(D.beta0=D.beta0,D.beta1=D.beta1,rsf.beta=rsf.beta,
                beta0.lam=beta0.lam,beta1.lam=beta1.lam,E=E,
