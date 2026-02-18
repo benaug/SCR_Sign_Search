@@ -123,9 +123,9 @@ getAvail <- nimbleFunction(
     delta <- 1e-10 #this sets the degree of trimming used to get individual availability distributions
     x.limits <- qnorm(c(delta,1-delta),mean=s[1],sd=sigma)
     y.limits <- qnorm(c(delta,1-delta),mean=s[2],sd=sigma)
-    #convert to grid edges instead of centroids
-    x.vals.edges <- c(x.vals - res/2, x.vals[n.cells.x]+0.5*res)
-    y.vals.edges <- c(y.vals - res/2, y.vals[n.cells.y]+0.5*res)
+    #convert to grid edges instead of centroids (could precompute)
+    x.vals.edges <- c(x.vals - res/2, x.vals[n.cells.x] + res/2)
+    y.vals.edges <- c(y.vals - res/2, y.vals[n.cells.y] + res/2)
     #trim in x and y direction
     if(x.vals.edges[1]<x.limits[1]){
       x.start <- floor((x.limits[1] - x.vals.edges[1]) / res) + 1
@@ -235,35 +235,32 @@ rCell <- nimbleFunction(
 
 #GPS vector distributions
 dTruncNormVector <- nimbleFunction(
-  run = function(x = double(2), s = double(1), sigma = double(0), u.xlim = double(2), u.ylim = double(2),
-                 n.locs.ind = double(0), log = integer(0)) {
+  run = function(x = double(2), s = double(1), sigma = double(0), u.xlim = double(2), u.ylim = double(2), n.locs.ind = double(0), log = integer(0)) {
     returnType(double(0))
     if(n.locs.ind>0){
-      logProb <- 0
-      for(i in 1:n.locs.ind){
-        # log density at point
+      logProb <- 0 
+      eps <- 1e-100 #prevent underflow 
+      for(i in 1:n.locs.ind){ 
+        # log density at point 
         logpx <- dnorm(x[i,1], mean = s[1], sd = sigma, log = TRUE)
-        logpy <- dnorm(x[i,2], mean = s[2], sd = sigma, log = TRUE)
-        # log CDFs - need to deal with potential underflow
-        lFxU <- pnorm(u.xlim[i,2], mean = s[1], sd = sigma, log.p = TRUE)
-        lFxL <- pnorm(u.xlim[i,1], mean = s[1], sd = sigma, log.p = TRUE)
-        lFyU <- pnorm(u.ylim[i,2], mean = s[2], sd = sigma, log.p = TRUE)
-        lFyL <- pnorm(u.ylim[i,1], mean = s[2], sd = sigma, log.p = TRUE)
-        # if U <= L numerically, density is undefined -> -Inf
-        if (lFxU <= lFxL | lFyU <= lFyL){
-          logProb <- -Inf
-        }else{
-          logDenX <- lFxU + log(1 - exp(lFxL - lFxU))
-          logDenY <- lFyU + log(1 - exp(lFyL - lFyU))
-          logProb <- logProb + (logpx - logDenX) + (logpy - logDenY)
-        }
-      }
-    }else{
-      logProb <- 0
-    }
-    return(logProb)
-  }
-)
+        logpy <- dnorm(x[i,2], mean = s[2], sd = sigma, log = TRUE) # truncation probabilities for the cell bounds 
+        denomx <- pnorm(u.xlim[i,2], mean = s[1], sd = sigma) - pnorm(u.xlim[i,1], mean = s[1], sd = sigma)
+        denomy <- pnorm(u.ylim[i,2], mean = s[2], sd = sigma) - pnorm(u.ylim[i,1], mean = s[2], sd = sigma) 
+        # if bounds are numerically zero/negative, reject 
+        if(denomx <= 0.0 | denomy <= 0.0){ 
+          return(-Inf) 
+        } 
+        # if extremely tiny, treat as essentially impossible 
+        if(denomx < eps | denomy < eps){
+          return(-Inf)
+        } 
+        logProb <- logProb + logpx - log(denomx) + logpy - log(denomy)
+      } 
+    }else{ 
+      logProb <- 0 
+    } 
+    return(logProb) 
+  })
 
 rTruncNormVector <- nimbleFunction(
   run = function(n = integer(0), s = double(1), sigma = double(0), u.xlim = double(2), u.ylim = double(2), n.locs.ind = double(0)) {
