@@ -6,10 +6,13 @@ This is an SCR model for sign searches where:
 2) the continuous location of a sign is recorded when they are detected
 3) an individuals sign can be detected in multiple locations per occasion (the model currently only considers one occasion)
 
-The status quo for sign searches is to discretize the effort into "effective detectors", and snap the continuous
+The status quo* for sign searches is to discretize the effort into "effective detectors", and snap the continuous
 sign locations to the centroid of the effective detector in which they were found. When doing this, if the effective detectors
 are spaced too far apart relative to sigma, the sigma estimates are positively biased. The model here allows the 
 continuous locations to be used so this does not occur.
+
+*Efford has a similar model in secr and Zhang et al. is similar, too. I'll compare and contrast later.
+https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecy.3887
 
 This model is modified from the Royle-Young model for area searches found here:
 https://github.com/benaug/RoyleYoung
