@@ -20,8 +20,14 @@ https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecy.3887
 This model is modified from the Royle-Young model for area searches of *individuals* found here:
 https://github.com/benaug/RoyleYoung
 
+The data augmentation approach is explained here:
+https://github.com/benaug/SCR-N-Prior-Data-Augmentation
 
-Individual expected detection rate at a trap is assumed to be proportional to the individual use probability of the cell containing trap.
+One difference, though, is that in this model, I am gating the activity center and within home range space use model by z, so that no
+likelihood is contributed when z_i=0 and activity centers are jointly turned on/off with z_i. When z_i=0, I set the s values and 
+within home range space use objects to 0. This makes the MCMC more efficient.
+
+In this model, individual expected detection rate at a trap is assumed to be proportional to the individual use probability of the cell containing trap.
 (perfect "compensatory heterogeneity").
 
 lam[i,j] <- lambda.detect[j]*use.dist[i,trap.to.cell[j]] #trap.to.cell maps traps to cells
@@ -39,7 +45,8 @@ There are two sets of model files. Files with "1K" are set up for 1 occasion. Fi
 
 
 The model is also set up for supplemental telemetry data (not the same individuals being detected). This can be turned off,
-or telemetry from the individuals being detected can be included with some modification.
+or telemetry from the individuals being detected can be included with some modification. I expect telemetry will often be required
+to estimate within home range space use with precision.
 
 The test script does not simulate a transect search to define traps. I just allocate some equally spaced cells to search. This is 
 more efficient than a real transect search for the same amount of effort. Simulate transect searches for more realistic scenarios.
