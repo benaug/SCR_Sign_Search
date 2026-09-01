@@ -11,14 +11,15 @@ sign locations to the centroid of the effective detector in which they were foun
 are spaced too far apart relative to sigma, the sigma estimates are positively biased. The model here allows the 
 continuous locations to be used so this does not occur.
 
-*Efford has a similar model in secr and Zhang et al. is similar, too. I'll compare and contrast later.
+*Efford has a similar model in secr and Zhang et al. is similar, too. The main difference I see is that my approach
+includes within home range resource selection and capitalizes on the separability of the x and y dimensions
+with the bivariate normal distribution to reduce computations, store reusable quantities, and speed up the MCMC. However,
+this only works for a BVN availability distribution.
 https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecy.3887
 
-This model is modified from the Royle-Young model for area searches found here:
+This model is modified from the Royle-Young model for area searches of *individuals* found here:
 https://github.com/benaug/RoyleYoung
 
-Within home range resource selection can be modeled. This feature is currently turned off, but instructions in test script to
-turn it back on. 
 
 Individual expected detection rate at a trap is assumed to be proportional to the individual use probability of the cell containing trap.
 (perfect "compensatory heterogeneity").
@@ -29,10 +30,16 @@ where lambda.detect[j] is a function of (log-transformed) effort
 
 log(lambda.detect[j]) <- beta0.lam + beta1.lam*E[j]
 
+The within home range space use model is the same as the between primary period relocation model used in the Jolly-Seber N-Prior Data Augmentation
+repository. It is an RSF weighted BVN movement model. The factored representation used to fit the model here is the same as used in 
+Jolly-Seber and is described in the movement model section of the readme for that repository:
+https://github.com/benaug/Jolly-Seber-N-Prior-DA
+
+There are two sets of model files. Files with "1K" are set up for 1 occasion. Files with "multiK" are set up for 2+ occasions.
 
 
-The model is also set up for supplemental telemetry data (not the same individuals beign detected). This can be turned off,
-or telemetry from the individuals being detected can be included.
+The model is also set up for supplemental telemetry data (not the same individuals being detected). This can be turned off,
+or telemetry from the individuals being detected can be included with some modification.
 
-I have not tested this code, yet, but will get to it. It appears to be working correctly and is built on the 
-well tested Royle-Young code. There may be more efficiency gains to be made, will look at that.
+The test script does not simulate a transect search to define traps. I just allocate some equally spaced cells to search. This is 
+more efficient than a real transect search for the same amount of effort. Simulate transect searches for more realistic scenarios.

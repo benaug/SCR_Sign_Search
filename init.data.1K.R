@@ -11,15 +11,13 @@ getCellR <- function(u,res,cells,xlim,ylim){
 init.data <- function(data=NA,M=NA,inits=NA){
   data <- c(data$constants,data$capture,data$telemetry) #restructure data list
   J <- data$J
-  K <- data$K
   xlim <- data$xlim
   ylim <- data$ylim
   cells <- data$cells
   dSS <- data$dSS
   InSS <- data$InSS
-
-  #get some inits, actually sigma is all we need
-  sigma <- inits$sigma
+  X <- data$X
+  res <- data$res 
   
   n <- nrow(data$y)
   y <- matrix(0,M,J)

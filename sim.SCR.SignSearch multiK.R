@@ -1,6 +1,15 @@
+getCellR <- function(u,res,cells,xlim,ylim){
+  inout <- 1*(u[1]>xlim[1]&u[1]<xlim[2]&u[2]>ylim[1]&u[2]<ylim[2])
+  if(inout==1){
+    this.cell.init <- cells[trunc(u[1]/res)+1,trunc(u[2]/res)+1]
+  }else{
+    this.cell.init <- 0
+  }
+  return(this.cell.init)
+}
 
 sim.SCR.SignSearch <-
-  function(D.beta0=NA,D.beta1=NA,rsf.beta=NA,beta0.lam=NA,beta1.lam=NA,E=NA,
+  function(D.beta0=NA,D.beta1=NA,rsf.beta=NA,beta0.lam=NA,beta1.lam=NA,E=NA,K=NA, # changed
            sigma=NA,X=X,
            xlim=NA,ylim=NA,res=NA,InSS=NA,D.cov=NA,rsf.cov=NA,effort=NA,survey=NA,
            K.tel=0,n.tel.inds=0){
@@ -30,7 +39,6 @@ sim.SCR.SignSearch <-
     N <- rpois(1,lambda.N)
 
     #Activity centers
-    # s.cell <- rcat(N,pi.cell)
     s.cell <- sample(1:n.cells,N,replace=TRUE,prob=pi.cell)
     s <- matrix(NA,N,2)
     for(i in 1:N){
@@ -42,7 +50,7 @@ sim.SCR.SignSearch <-
     points(s[,1],s[,2],pch=16)
     
     #RSF Model
-    rsf <- exp(rsf.beta*rsf.cov)
+    rsf <- InSS*exp(rsf.beta*rsf.cov)
     #get BVN availability and use distributions
     avail.dist <- use.dist <- matrix(NA,N,n.cells)
     for(i in 1:N){
@@ -57,36 +65,46 @@ sim.SCR.SignSearch <-
     detector.to.cell <- rep(0,J)
     cell.to.detector <- rep(0,n.cells) #using 0 to indicate NA so we don't get warning compiling nimble model
     for(j in 1:J){
-      detector.to.cell[j] <- getCell(X[j,],res=res,cells=cells,xlim=xlim,ylim=ylim)
+      detector.to.cell[j] <- getCellR(X[j,],res=res,cells=cells,xlim=xlim,ylim=ylim)
       cell.to.detector[detector.to.cell[j]] <- j
     }
     
     #simulate cell-level detection
-    lambda.detect <- exp(beta0.lam + beta1.lam*E)
-    y <- matrix(NA,N,J)
+    # lambda.detect <- exp(beta0.lam + beta1.lam*E)
+    # y <- matrix(NA,N,J)
+    lambda.detect <- matrix(NA,K,J) # changed
+    for(k in 1:K){ # changed
+      lambda.detect[k,1:J] <- survey[k,1:J]*exp(beta0.lam[k] + beta1.lam*E[k,1:J]) # changed
+    } # changed
+    y <- array(NA,dim=c(N,K,J)) # changed
     for(i in 1:N){
-      for(j in 1:J){
-        lam <- lambda.detect[j]*use.dist[i,detector.to.cell[j]] #use.dist evaluated at cell detector j is in
-        y[i,j] <- rpois(1,lam)
-      }
+      for(k in 1:K){ # changed
+        for(j in 1:J){
+          # lam <- lambda.detect[j]*use.dist[i,detector.to.cell[j]] #use.dist evaluated at cell detector j is in
+          # y[i,j] <- rpois(1,lam)
+          lam <- lambda.detect[k,j]*use.dist[i,detector.to.cell[j]] #use.dist evaluated at cell detector j is in # changed
+          y[i,k,j] <- rpois(1,lam) # changed
+        }
+      } # changed
     }
     #simulate locations of detections
-    n.u.ind <- rowSums(y)
+    # n.u.ind <- rowSums(y)
+    n.u.ind <- apply(y,1,sum) # changed
+    y.det <- apply(y,c(1,3),sum) # changed
     n.u <- sum(n.u.ind)
     max.n.u <- max(n.u.ind)
     u <- array(NA,dim=c(N,max.n.u,2))
     this.j <- u.cell <- matrix(NA,N,max.n.u)
     for(i in 1:N){
       if(n.u.ind[i]>0){
-        this.j[i,1:n.u.ind[i]] <- rep(which(y[i,]>0),times=y[i,which(y[i,]>0)])
+        # this.j[i,1:n.u.ind[i]] <- rep(which(y[i,]>0),times=y[i,which(y[i,]>0)])
+        this.j[i,1:n.u.ind[i]] <- rep(which(y.det[i,]>0),times=y.det[i,which(y.det[i,]>0)]) # changed
         for(l in 1:n.u.ind[i]){
           u.cell[i,l] <- detector.to.cell[this.j[i,l]] #cell this detector is in
           u.xlim <- dSS[u.cell[i,l],1] + c(-res,res)/2
           u.ylim <- dSS[u.cell[i,l],2] + c(-res,res)/2
-          u[i,l,1] <- rtruncnorm(1,a=u.xlim[1],b=u.xlim[2],
-                                 mean=s[i,1],sd=sigma)
-          u[i,l,2] <- rtruncnorm(1,a=u.ylim[1],b=u.ylim[2],
-                                 mean=s[i,2],sd=sigma)
+          u[i,l,1] <- rtruncnorm(1,a=u.xlim[1],b=u.xlim[2],mean=s[i,1],sd=sigma)
+          u[i,l,2] <- rtruncnorm(1,a=u.ylim[1],b=u.ylim[2],mean=s[i,2],sd=sigma)
         }
       }
     }
@@ -94,9 +112,11 @@ sim.SCR.SignSearch <-
     image(x.vals,y.vals,matrix(colSums(use.dist),length(x.vals),length(y.vals)),
           main="Capture Plot with Intensity of Use Summed over Individuals",xlab="X",ylab="Y",col=rev(viridisLite::mako(100)))
     grid(n.cells.x,n.cells.y,lwd=1,lty=1,col="grey80")
-    detected <- which(rowSums(y)>0)
+    # detected <- which(rowSums(y)>0)
+    detected <- which(apply(y,1,sum)>0) # changed
     points(s[,1],s[,2],pch=16,col="darkred",cex=1)
-    y2D <- apply(y,c(1,2),sum)
+    # y2D <- apply(y,c(1,2),sum)
+    y2D <- apply(y,c(1,3),sum) # changed
     for(i in detected){
       for(l in 1:n.u.ind[i]){
         lines(x=c(s[i,1],u[i,l,1]),
@@ -119,7 +139,7 @@ sim.SCR.SignSearch <-
         s.tel[i,2] <- runif(1,s.ylim[1],s.ylim[2])
       }
       #get BVN availability and use distributions
-      avail.dist.tel <- use.dist.tel <- matrix(NA,N,n.cells)
+      avail.dist.tel <- use.dist.tel <- matrix(NA,n.tel.inds,n.cells)
       for(i in 1:n.tel.inds){
         avail.dist.tel[i,] <- getAvail(s=s.tel[i,1:2],sigma=sigma,res=res,x.vals=x.vals,
                                        y.vals=y.vals,n.cells.x=n.cells.x,n.cells.y=n.cells.y)
@@ -132,7 +152,6 @@ sim.SCR.SignSearch <-
       u.xlim.tel <- u.ylim.tel <- array(NA,dim=c(n.tel.inds,K.tel,2))
       for(i in 1:n.tel.inds){
         for(k in 1:K.tel){
-          # u.cell.tel[i,k] <- rcat(1,use.dist.tel[i,])
           u.cell.tel[i,k] <- sample(1:n.cells,1,replace=TRUE,prob=use.dist.tel[i,])
           u.xlim.tel[i,k,] <- dSS[u.cell.tel[i,k],1] + c(-res,res)/2
           u.ylim.tel[i,k,] <- dSS[u.cell.tel[i,k],2] + c(-res,res)/2
@@ -166,9 +185,11 @@ sim.SCR.SignSearch <-
     }
 
     #discard uncaptured inds and disaggregate data
-    caught <- which(rowSums(y)>0)
+    # caught <- which(rowSums(y)>0)
+    caught <- which(apply(y,1,sum)>0) # changed
     n <- length(caught)
-    y <- y[caught,]
+    # y <- y[caught,]
+    y <- y[caught,1:K,1:J,drop=FALSE] # changed
     s <- s[caught,]
     s.cell <- s.cell[caught]
     
@@ -178,10 +199,12 @@ sim.SCR.SignSearch <-
     u.cell.obs <- u.cell[caught,]
     n.u.ind.obs <- n.u.ind[caught]
     
-    constants <- list(X=X,J=J,K.tel=K.tel,xlim=xlim,ylim=ylim,dSS=dSS,res=res,cells=cells,x.vals=x.vals,y.vals=y.vals,
+    # constants <- list(X=X,J=J,K.tel=K.tel,xlim=xlim,ylim=ylim,dSS=dSS,res=res,cells=cells,x.vals=x.vals,y.vals=y.vals,
+    constants <- list(X=X,J=J,K=K,K.tel=K.tel,xlim=xlim,ylim=ylim,dSS=dSS,res=res,cells=cells,x.vals=x.vals,y.vals=y.vals, # changed
                       n.tel.inds=n.tel.inds,n.locs.ind=n.locs.ind,detector.to.cell=detector.to.cell,cell.to.detector=cell.to.detector,
                       InSS=InSS,n.cells=n.cells,n.cells.x=n.cells.x,n.cells.y=n.cells.y,D.cov=D.cov,rsf.cov=rsf.cov,
-                      E=E)
+                      # E=E)
+                      E=E,survey=survey) # changed
     truth <- list(lambda.N=lambda.N,lambda.cell=lambda.cell,rsf=rsf,N=N,s=s,s.cell=s.cell,
                   n=n,s.tel=s.tel,s.tel.cell=s.tel.cell,
                   use.dist=use.dist,avail.dist=avail.dist,

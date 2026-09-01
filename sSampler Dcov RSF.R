@@ -9,6 +9,7 @@ sSamplerDcovRSF <- nimbleFunction(
     n.cells.x <- control$n.cells.x
     n.cells.y <- control$n.cells.y
     calcNodes <- control$calcNodes
+    calcNodes.z0 <- control$calcNodes.z0 # changed
     ## control list extraction
     # logScale            <- extractControlElement(control, 'log',                 FALSE)
     # reflective          <- extractControlElement(control, 'reflective',          FALSE)
@@ -56,8 +57,10 @@ sSamplerDcovRSF <- nimbleFunction(
       xlim.cell <- c(s.cell.x-1,s.cell.x)*res
       ylim.cell <- c(s.cell.y-1,s.cell.y)*res
       model$s[i, 1:2] <<- c(runif(1, xlim.cell[1], xlim.cell[2]), runif(1, ylim.cell[1], ylim.cell[2]))
-      model$calculate(calcNodes)
-      copy(from = model, to = mvSaved, row = 1, nodes = calcNodes, logProb = TRUE)
+      # model$calculate(calcNodes)
+      # copy(from = model, to = mvSaved, row = 1, nodes = calcNodes, logProb = TRUE)
+      model$calculate(calcNodes.z0) # changed: z=0 AC update excludes availability/use calculations
+      copy(from = model, to = mvSaved, row = 1, nodes = calcNodes.z0, logProb = TRUE) # changed
     }else{#MH
       s.cand <- c(rnorm(1,model$s[i,1],scale), rnorm(1,model$s[i,2],scale))
       inbox <- s.cand[1]< xlim[2] & s.cand[1]> xlim[1] & s.cand[2] < ylim[2] & s.cand[2] > ylim[1]
@@ -72,7 +75,7 @@ sSamplerDcovRSF <- nimbleFunction(
         } else {
           copy(from = mvSaved, to = model, row = 1, nodes = calcNodes, logProb = TRUE)
         }
-        if(adaptive){ #we only tune for z=0 proposals
+        if(adaptive){ #we only tune for z=1 proposals
           adaptiveProcedure(accept)
         }
       }
@@ -205,7 +208,7 @@ sSamplerDcovRSF.tel <- nimbleFunction(
       } else {
         copy(from = mvSaved, to = model, row = 1, nodes = calcNodes.s.tel, logProb = TRUE)
       }
-      if(adaptive){ #we only tune for z=0 proposals
+      if(adaptive){
         adaptiveProcedure(accept)
       }
     }
