@@ -63,12 +63,13 @@ rPoissonVector <- nimbleFunction(
   }
 )
 
+#used in data simulator
 getAvail <- nimbleFunction(
   run = function(s = double(1),sigma=double(0),res=double(0),x.vals=double(1),y.vals=double(1),n.cells.x=integer(0),n.cells.y=integer(0)) {
     returnType(double(1))
     avail.dist.x <- rep(0,n.cells.x)
     avail.dist.y <- rep(0,n.cells.y)
-    delta <- 1e-10 #this sets the degree of trimming used to get individual availability distributions
+    delta <- 1e-12 #this sets the degree of trimming used to get individual availability distributions
     x.limits <- qnorm(c(delta,1-delta),mean=s[1],sd=sigma)
     y.limits <- qnorm(c(delta,1-delta),mean=s[2],sd=sigma)
     #convert to grid edges instead of centroids (could precompute)
@@ -160,7 +161,7 @@ getAvail1D <- nimbleFunction(
   }
 )
 
-#Scalar normalizing constant for RSF-weighted use. The scan identifies the
+#normalizing constant for RSF-weighted use. The scan identifies the
 #nonzero x/y ranges so the nested loop does not use the full grid when sigma is small relative to grid extent.
 getUseDenom <- nimbleFunction(
   run = function(rsf = double(1),avail.x = double(1),avail.y = double(1),
@@ -258,7 +259,7 @@ rAC <- nimbleFunction(
   }
 )
 
-#Within-cell continuous likelihood using cached 1-D availability probabilities.
+#Within-cell continuous likelihood using stored 1-D availability probabilities.
 duInCell <- nimbleFunction(
   run = function(x = double(1),s = double(1),u.cell = double(0),sigma = double(0),
                  n.cells.x = integer(0),res = double(0),avail.x = double(1),avail.y = double(1),
@@ -485,7 +486,7 @@ zSampler <- nimbleFunction(
               y.idx <- pick+(k-1)*M
               lp.proposed.y <- lp.proposed.y + model$calculate(y.nodes[y.idx])
             }
-            # lp.proposed.s <- model$calculate(s.nodes[pick]) #cancels with proposal, calculate afteracceptance
+            # lp.proposed.s <- model$calculate(s.nodes[pick]) #cancels with proposal, calculate after acceptance
             
             #s target and proposal terms cancel 
             # lp.proposed.s <- model$calculate(s.nodes[pick])
