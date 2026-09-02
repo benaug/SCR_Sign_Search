@@ -90,9 +90,6 @@ K.tel <- 10 #number of telemetry locations per individual
 
 set.seed(32444) #change this for new data set
 
-# E <- log(runif(J,0,1)) #simulate detector effort in J searched cells (centroids in X)
-# lambda.detect <-  exp(beta0.lam + beta1.lam*E)
-# plot(lambda.detect~exp(E)) #plot is function of linear effort
 survey <- matrix(1,K,J) #1 if detector j operated on occasion k, 0 otherwise
 E <- matrix(log(runif(K*J,0,1)),K,J) #occasion x detector log effort
 lambda.detect <- survey*exp(beta0.lam + beta1.lam*E)
@@ -105,7 +102,7 @@ data <- sim.SCR.SignSearch(D.beta0=D.beta0,D.beta1=D.beta1,rsf.beta=rsf.beta,
 
 data$truth$lambda.N #expected abundance from D cov inputs
 data$truth$N #simulated realized abundance
-data$truth$n #number of inds captured
+data$truth$n #number of inds detected
 # table(rowSums(data$capture$y>0)) #number of inds captures X times (events not counts)
 table(apply(data$capture$y>0,1,sum)) #number of individual detector x occasion detection events
 
@@ -177,7 +174,6 @@ constants <- list(M=M,J=J,K=K,n.cells=data$constants$n.cells,n.cells.x=data$cons
                   n.cells.y=data$constants$n.cells.y,res=data$constants$res,
                   x.vals.edges=x.vals.edges,y.vals.edges=y.vals.edges,avail.z=avail.z,
                   detector.cell.x=detector.cell.x,detector.cell.y=detector.cell.y,
-                  xlim=data$constants$xlim,ylim=data$constants$ylim,
                   n.locs.ind=data$constants$n.locs.ind,n.tel.inds=data$constants$n.tel.inds,
                   D.cov=D.cov,cellArea=data$constants$res^2,
                   n=data$capture$n,n.u.ind=data$capture$n.u.ind) #indexing for detection locations inside cells
@@ -185,9 +181,8 @@ constants <- list(M=M,J=J,K=K,n.cells=data$constants$n.cells,n.cells.x=data$cons
 #supply data to nimble
 Nimdata <- list(y=nimbuild$y,E=data$constants$E,survey=data$constants$survey,#log transformed if log transformed above
                 u.tel=data$telemetry$u.tel,u.cell.tel=data$telemetry$u.cell.tel,
-                cells=data$constants$cells,InSS=data$constants$InSS,
+                InSS=data$constants$InSS,
                 z=nimbuild$z,rsf.cov=rsf.cov,pi.cell.tel=pi.cell.tel,
-                dummy.data=rep(1,M),dummy.data.tel=rep(1,data$constants$n.tel.inds),
                 u.cell=data$capture$u.cell,u=data$capture$u)
 
 # set parameters to monitor
@@ -206,20 +201,16 @@ conf <- configureMCMC(Rmodel,monitors=parameters, thin=nt,nodes=config.nodes)
 ###*required* N/z sampler
 z.ups <- round(M*0.25) # how many N/z proposals per iteration? Not sure what is optimal, setting to 25% of M here.
 #nodes used for update, calcNodes + z nodes
-# y.nodes <- Rmodel$expandNodeNames(paste("y[1:",M,",1:",J,"]"))
-y.nodes <- character(M*K)
-for(i in 1:M){
-  for(k in 1:K){
-    y.nodes[(i-1)*K+k] <- Rmodel$expandNodeNames(paste("y[",i,",",k,",1:",J,"]"))
-  }
-}
+y.nodes <- Rmodel$expandNodeNames("y")
 N.node <- Rmodel$expandNodeNames(paste("N"))
 z.nodes <- Rmodel$expandNodeNames(paste("z[1:",M,"]"))
-calcNodes <- c(N.node,y.nodes)
+s.nodes <- Rmodel$expandNodeNames("s")
+calcNodes <- c(N.node,y.nodes,s.nodes)
 ind.detected <- 1*(apply(nimbuild$y,1,sum)>0)
 conf$addSampler(target = c("N"),
                 type = 'zSampler',control = list(z.ups=z.ups,M=M,K=K,ind.detected=ind.detected,
-                                                 y.nodes=y.nodes,N.node=N.node,z.nodes=z.nodes,calcNodes=calcNodes,
+                                                 y.nodes=y.nodes,N.node=N.node,z.nodes=z.nodes,s.nodes=s.nodes,
+                                                 calcNodes=calcNodes,
                                                  res=data$constants$res,x.vals.edges=x.vals.edges,
                                                  y.vals.edges=y.vals.edges,avail.z=avail.z,
                                                  n.cells=data$constants$n.cells,n.cells.x=data$constants$n.cells.x,
@@ -228,15 +219,9 @@ conf$addSampler(target = c("N"),
 #add sSampler
 for(i in 1:M){
   calcNodes <- Rmodel$getDependencies(paste("s[",i,",1:2]"))
-  calcNodes.z0 <- c(Rmodel$expandNodeNames(paste("s[",i,",1:2]")),
-                    Rmodel$expandNodeNames(paste("s.cell[",i,"]")),
-                    Rmodel$expandNodeNames(paste("dummy.data[",i,"]")))
   conf$addSampler(target = paste("s[",i,",1:2]", sep=""),
                   type = 'sSamplerDcovRSF',control = list(i=i,xlim=data$constants$xlim,ylim=data$constants$ylim,
-                                                          n.cells.x=data$constants$n.cells.x,
-                                                          n.cells.y=data$constants$n.cells.y,
-                                                          res=data$constants$res,calcNodes=calcNodes,
-                                                          calcNodes.z0=calcNodes.z0), silent = TRUE)
+                                                          calcNodes=calcNodes), silent = TRUE)
 }
 
 #add efficient s sampler for telemetry inds
@@ -270,7 +255,6 @@ end.time <- Sys.time()
 end.time - start.time  # total time for compilation, replacing samplers, and fitting
 end.time - start.time2 # post-compilation run time
 
-library(coda)
 mvSamples <- as.matrix(Cmcmc$mvSamples)
 burnin <- 250
 plot(mcmc(mvSamples[-c(1:burnin),])) #discarding some burnin here. Can't plot 1st sample which is all NA

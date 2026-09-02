@@ -21,7 +21,7 @@ init.data <- function(data=NA,M=NA,inits=NA){
   
   n <- nrow(data$y)
   y <- matrix(0,M,J)
-  y[1:n,] <- data$y
+  y[1:n,1:J] <- data$y 
   #Initialize z, just using observed z's
   z.init <- c(rep(1,n),rep(0,M-n))
   s.init <- cbind(runif(M,xlim[1],xlim[2]),runif(M,ylim[1],ylim[2]))
@@ -45,11 +45,13 @@ init.data <- function(data=NA,M=NA,inits=NA){
       s.init[i,] <- dSS[pick,]
     }
   }
+  #z=0 individuals have activity centers set to 0
+  s.init[z.init==0,] <- 0 
   s.tel.init <- apply(data$u.tel,c(1,3),mean,na.rm=TRUE)
   #move any initialized outside state space
   for(i in 1:data$n.tel.inds){
     s.cell.init <- getCellR(s.tel.init[i,],res,cells,xlim,ylim)
-    if(InSS[s.cell.init]==0){#not in SS, move to nearest cell
+    if(InSS[s.cell.init]==0){ #not in SS, move to nearest cell
       dists <- sqrt((dSS[s.cell.init,1]-dSS[,1])^2+(dSS[s.cell.init,2]-dSS[,2])^2)
       dists[InSS==0] <- Inf
       pick <- which(dists==min(dists))[1] #if more than 1, just use first

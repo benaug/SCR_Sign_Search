@@ -8,8 +8,7 @@ NimModel <- nimbleCode({
   rsf.beta ~ dnorm(0,sd=10) 
   #availability distribution spatial scale
   sigma ~ dunif(0,20)
-  #detection intensity within searched cell a function of effort
-  beta0.lam ~ dnorm(0,sd=10)
+  beta0.lam ~ dnorm(0,sd=10) #detection intercept
   beta1.lam ~ dnorm(0,sd=10) #effort coefficient
   
   #Density model
@@ -21,18 +20,13 @@ NimModel <- nimbleCode({
   lambda.N <- D.intercept*pi.denom #Expected N
   N ~ dpois(lambda.N)
   #Resource selection function evaluated across all cells in state space (InSS)
-  #Constrain use to InSS, matching the capture-model normalization used previously
   rsf[1:n.cells] <- InSS[1:n.cells]*exp(rsf.beta*rsf.cov[1:n.cells])
   #detection rate a function of effort (log-transform E)
-  log(lambda.detect[1:J]) <- beta0.lam + beta1.lam*E[1:J]
-  #ACs, avail and use dists, detection model
+  lambda.detect[1:J] <- survey[1:J]*exp(beta0.lam + beta1.lam*E[1:J])
   for(i in 1:M){
-    #continuous activity center likelihood inside cell
-    s[i,1] ~ dunif(xlim[1],xlim[2])
-    s[i,2] ~ dunif(ylim[1],ylim[2])
-    s.cell[i] <- cells[trunc(s[i,1]/res)+1,trunc(s[i,2]/res)+1] #extract activity center cell
-    #categorical activity center likelihood for this cell, equivalent to zero's trick
-    dummy.data[i] ~ dCell(pi.cell[s.cell[i]])
+    # z-gated AC distribution. When z=0, s is fixed at c(0,0); when z=1, s is drawn
+    # from pi.cell and then uniformly within the selected cell.
+    s[i,1:2] ~ dAC(pi.cell=pi.cell[1:n.cells],res=res,n.cells.x=n.cells.x,n.cells.y=n.cells.y,z=z[i])
     #Factored individual availability distribution. The BVN cell probability is
     #avail.x[cell.x]*avail.y[cell.y], no n.cells-length availability vector is stored.
     avail.x[i,1:n.cells.x] <- getAvail1D(s=s[i,1],sigma=sigma,res=res,vals.edges=x.vals.edges[1:(n.cells.x+1)],
@@ -61,13 +55,10 @@ NimModel <- nimbleCode({
   
   #optional telemetry
   for(i in 1:n.tel.inds){
-    s.tel[i,1] ~ dunif(xlim[1],xlim[2])
-    s.tel[i,2] ~ dunif(ylim[1],ylim[2])
-    s.cell.tel[i] <- cells[trunc(s.tel[i,1]/res)+1,trunc(s.tel[i,2]/res)+1] #extract activity center cell
-    #can use telemetry data to inform D cov estimation, assumes inds captured at random wrt to response to covs
-    #not linking telemetry individuals to D covs here, just uniform
-    # dummy.data.tel[i] ~ dCell(pi.cell[s.cell.tel[i]]) #use same density process as detected individuals
-    dummy.data.tel[i] ~ dCell(pi.cell.tel[s.cell.tel[i]]) #uniform over InSS
+    #use same density process as detected individuals
+    # s.tel[i,1:2] ~ dAC(pi.cell=pi.cell[1:n.cells],res=res,n.cells.x=n.cells.x,n.cells.y=n.cells.y,z=1)
+    #uniform over InSS
+    s.tel[i,1:2] ~ dAC(pi.cell=pi.cell.tel[1:n.cells],res=res,n.cells.x=n.cells.x,n.cells.y=n.cells.y,z=1)
     #Factored telemetry availability and normalizing constants.
     avail.x.tel[i,1:n.cells.x] <- getAvail1D(s=s.tel[i,1],sigma=sigma,res=res,
                                              vals.edges=x.vals.edges[1:(n.cells.x+1)],

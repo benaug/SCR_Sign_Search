@@ -9,9 +9,8 @@ getCellR <- function(u,res,cells,xlim,ylim){
 }
 
 sim.SCR.SignSearch <-
-  function(D.beta0=NA,D.beta1=NA,rsf.beta=NA,beta0.lam=NA,beta1.lam=NA,E=NA,K=NA, # changed
-           sigma=NA,X=X,
-           xlim=NA,ylim=NA,res=NA,InSS=NA,D.cov=NA,rsf.cov=NA,effort=NA,survey=NA,
+  function(D.beta0=NA,D.beta1=NA,rsf.beta=NA,beta0.lam=NA,beta1.lam=NA,E=NA,K=NA,
+           sigma=NA,X=X,xlim=NA,ylim=NA,res=NA,InSS=NA,D.cov=NA,rsf.cov=NA,effort=NA,survey=NA,
            K.tel=0,n.tel.inds=0){
     if(xlim[1]!=0|ylim[1]!=0)stop("xlim and ylim must start at 0.")
     if((diff(range(xlim))/res)%%1!=0)stop("The range of xlim must be divisible by 'res'")
@@ -37,7 +36,7 @@ sim.SCR.SignSearch <-
     image(x.vals,y.vals,matrix(lambda.cell.plot,length(x.vals),length(y.vals)),
           main="Spatially Explicit D and Realized ACs",xlab="X",ylab="Y",col=rev(viridisLite::mako(100)))
     N <- rpois(1,lambda.N)
-
+    
     #Activity centers
     s.cell <- sample(1:n.cells,N,replace=TRUE,prob=pi.cell)
     s <- matrix(NA,N,2)
@@ -70,35 +69,29 @@ sim.SCR.SignSearch <-
     }
     
     #simulate cell-level detection
-    # lambda.detect <- exp(beta0.lam + beta1.lam*E)
-    # y <- matrix(NA,N,J)
-    lambda.detect <- matrix(NA,K,J) # changed
-    for(k in 1:K){ # changed
-      lambda.detect[k,1:J] <- survey[k,1:J]*exp(beta0.lam[k] + beta1.lam*E[k,1:J]) # changed
-    } # changed
-    y <- array(NA,dim=c(N,K,J)) # changed
+    lambda.detect <- matrix(NA,K,J)
+    for(k in 1:K){
+      lambda.detect[k,1:J] <- survey[k,1:J]*exp(beta0.lam[k] + beta1.lam*E[k,1:J])
+    }
+    y <- array(NA,dim=c(N,K,J))
     for(i in 1:N){
-      for(k in 1:K){ # changed
+      for(k in 1:K){
         for(j in 1:J){
-          # lam <- lambda.detect[j]*use.dist[i,detector.to.cell[j]] #use.dist evaluated at cell detector j is in
-          # y[i,j] <- rpois(1,lam)
-          lam <- lambda.detect[k,j]*use.dist[i,detector.to.cell[j]] #use.dist evaluated at cell detector j is in # changed
-          y[i,k,j] <- rpois(1,lam) # changed
+          lam <- lambda.detect[k,j]*use.dist[i,detector.to.cell[j]] #use.dist evaluated at cell detector j is in
+          y[i,k,j] <- rpois(1,lam)
         }
-      } # changed
+      }
     }
     #simulate locations of detections
-    # n.u.ind <- rowSums(y)
-    n.u.ind <- apply(y,1,sum) # changed
-    y.det <- apply(y,c(1,3),sum) # changed
+    n.u.ind <- apply(y,1,sum)
+    y.det <- apply(y,c(1,3),sum)
     n.u <- sum(n.u.ind)
     max.n.u <- max(n.u.ind)
     u <- array(NA,dim=c(N,max.n.u,2))
     this.j <- u.cell <- matrix(NA,N,max.n.u)
     for(i in 1:N){
       if(n.u.ind[i]>0){
-        # this.j[i,1:n.u.ind[i]] <- rep(which(y[i,]>0),times=y[i,which(y[i,]>0)])
-        this.j[i,1:n.u.ind[i]] <- rep(which(y.det[i,]>0),times=y.det[i,which(y.det[i,]>0)]) # changed
+        this.j[i,1:n.u.ind[i]] <- rep(which(y.det[i,]>0),times=y.det[i,which(y.det[i,]>0)])
         for(l in 1:n.u.ind[i]){
           u.cell[i,l] <- detector.to.cell[this.j[i,l]] #cell this detector is in
           u.xlim <- dSS[u.cell[i,l],1] + c(-res,res)/2
@@ -112,11 +105,9 @@ sim.SCR.SignSearch <-
     image(x.vals,y.vals,matrix(colSums(use.dist),length(x.vals),length(y.vals)),
           main="Capture Plot with Intensity of Use Summed over Individuals",xlab="X",ylab="Y",col=rev(viridisLite::mako(100)))
     grid(n.cells.x,n.cells.y,lwd=1,lty=1,col="grey80")
-    # detected <- which(rowSums(y)>0)
-    detected <- which(apply(y,1,sum)>0) # changed
+    detected <- which(apply(y,1,sum)>0)
     points(s[,1],s[,2],pch=16,col="darkred",cex=1)
-    # y2D <- apply(y,c(1,2),sum)
-    y2D <- apply(y,c(1,3),sum) # changed
+    y2D <- apply(y,c(1,3),sum)
     for(i in detected){
       for(l in 1:n.u.ind[i]){
         lines(x=c(s[i,1],u[i,l,1]),
@@ -125,7 +116,6 @@ sim.SCR.SignSearch <-
       }
     }
     points(X,pch=4,lwd=2)
-    
     
     ####Telemetry data#####
     #simulating from same D model here
@@ -183,13 +173,11 @@ sim.SCR.SignSearch <-
       n.locs.ind <- NA
       n.locs.max <- NA
     }
-
+    
     #discard uncaptured inds and disaggregate data
-    # caught <- which(rowSums(y)>0)
-    caught <- which(apply(y,1,sum)>0) # changed
+    caught <- which(apply(y,1,sum)>0)
     n <- length(caught)
-    # y <- y[caught,]
-    y <- y[caught,1:K,1:J,drop=FALSE] # changed
+    y <- y[caught,1:K,1:J,drop=FALSE]
     s <- s[caught,]
     s.cell <- s.cell[caught]
     
@@ -199,18 +187,16 @@ sim.SCR.SignSearch <-
     u.cell.obs <- u.cell[caught,]
     n.u.ind.obs <- n.u.ind[caught]
     
-    # constants <- list(X=X,J=J,K.tel=K.tel,xlim=xlim,ylim=ylim,dSS=dSS,res=res,cells=cells,x.vals=x.vals,y.vals=y.vals,
-    constants <- list(X=X,J=J,K=K,K.tel=K.tel,xlim=xlim,ylim=ylim,dSS=dSS,res=res,cells=cells,x.vals=x.vals,y.vals=y.vals, # changed
+    constants <- list(X=X,J=J,K=K,K.tel=K.tel,xlim=xlim,ylim=ylim,dSS=dSS,res=res,cells=cells,x.vals=x.vals,y.vals=y.vals, 
                       n.tel.inds=n.tel.inds,n.locs.ind=n.locs.ind,detector.to.cell=detector.to.cell,cell.to.detector=cell.to.detector,
                       InSS=InSS,n.cells=n.cells,n.cells.x=n.cells.x,n.cells.y=n.cells.y,D.cov=D.cov,rsf.cov=rsf.cov,
-                      # E=E)
-                      E=E,survey=survey) # changed
+                      E=E,survey=survey)
     truth <- list(lambda.N=lambda.N,lambda.cell=lambda.cell,rsf=rsf,N=N,s=s,s.cell=s.cell,
                   n=n,s.tel=s.tel,s.tel.cell=s.tel.cell,
                   use.dist=use.dist,avail.dist=avail.dist,
                   u=u,this.j=this.j,u.cell=u.cell,n.u.ind=n.u.ind)
     capture <- list(y=y,u=u.obs,this.j=this.j.obs,u.cell=u.cell.obs,n.u.ind=n.u.ind.obs,n=n)
-                    
+    
     if(n.tel.inds>0){
       telemetry <- list(u.tel=u.tel,u.cell.tel=u.cell.tel,u.xlim.tel=u.xlim.tel,
                         u.ylim.tel=u.ylim.tel) #observed telemetry data

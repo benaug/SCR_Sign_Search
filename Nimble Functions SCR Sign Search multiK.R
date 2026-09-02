@@ -206,20 +206,55 @@ getUseDenom <- nimbleFunction(
   }
 )
 
-dCell <- nimbleFunction(
-  run = function(x = double(0), pi.cell = double(0),
+#z-gated activity-center distribution combining pi.cell and the within-cell uniform density.
+#When z=1, choose a cell from pi.cell and use a uniform density within that cell.
+#When z=0, s is fixed at c(0,0), so inactive individuals do not retain latent ACs.
+dAC <- nimbleFunction(
+  run = function(x = double(1),pi.cell = double(1),res = double(0),n.cells.x = integer(0),n.cells.y = integer(0),z = integer(0),
                  log = integer(0)) {
     returnType(double(0))
-    logProb <- log(pi.cell)
-    return(logProb)
+    if(z==0){
+      if(x[1]==0 & x[2]==0){
+        logProb <- 0
+      }else{
+        logProb <- -Inf
+      }
+    }else{
+      cell.x <- trunc(x[1]/res)+1
+      cell.y <- trunc(x[2]/res)+1
+      cell <- cell.x+(cell.y-1)*n.cells.x
+      if(pi.cell[cell]<=0){
+        logProb <- -Inf
+      }else{
+        logProb <- log(pi.cell[cell])-2*log(res)
+      }
+    }
+    if(log){
+      return(logProb)
+    }else{
+      return(exp(logProb))
+    }
   }
 )
 
-#make dummy random number generator to make nimble happy
-rCell <- nimbleFunction(
-  run = function(n = integer(0),pi.cell = double(0)) {
-    returnType(double(0))
-    return(0)
+rAC <- nimbleFunction(
+  run = function(n = integer(0),pi.cell = double(1),res = double(0),n.cells.x = integer(0),n.cells.y = integer(0),z = integer(0)) {
+    returnType(double(1))
+    if(z==0){
+      return(c(0,0))
+    }else{
+      n.cells <- n.cells.x*n.cells.y
+      cell <- rcat(1,pi.cell[1:n.cells])
+      cell.x <- cell%%n.cells.x
+      cell.y <- floor(cell/n.cells.x)+1
+      if(cell.x==0){
+        cell.x <- n.cells.x
+        cell.y <- cell.y-1
+      }
+      x.sim <- runif(1,(cell.x-1)*res,cell.x*res)
+      y.sim <- runif(1,(cell.y-1)*res,cell.y*res)
+      return(c(x.sim,y.sim))
+    }
   }
 )
 
@@ -257,7 +292,7 @@ ruInCell <- nimbleFunction(
   })
 
 #Telemetry likelihood with the categorical cell probability and within-cell
-#truncated Normal combined. The availability cell masses cancel exactly.
+#truncated Normal combined. The availability cell masses cancel
 dTelemetryFactored <- nimbleFunction(
   run = function(x = double(2),u.cell = double(1),s = double(1),sigma = double(0),
                  rsf = double(1),use.denom = double(0),n.cells.x = integer(0),
@@ -293,13 +328,14 @@ zSampler <- nimbleFunction(
   contains = sampler_BASE,
   setup = function(model, mvSaved, target, control) {
     M <- control$M
-    K <- control$K # changed
+    K <- control$K
     ind.detected <- control$ind.detected
     z.ups <- control$z.ups
     y.nodes <- control$y.nodes
     N.node <- control$N.node
     z.nodes <- control$z.nodes
-    calcNodes <- control$calcNodes
+    s.nodes <- control$s.nodes
+    calcNodes <- c(control$calcNodes)
     res <- control$res
     x.vals.edges <- control$x.vals.edges
     y.vals.edges <- control$y.vals.edges
@@ -310,6 +346,7 @@ zSampler <- nimbleFunction(
   },
   run = function() {
     #Build undetected on/off lists once, then update after accepted proposals.
+    #Detected individuals are never included in z.on, so they can never be proposed off.
     z.on <- rep(0,M)
     z.off <- rep(0,M)
     non.curr <- 0
@@ -334,43 +371,62 @@ zSampler <- nimbleFunction(
           pick.pos <- rcat(1,rep(1/non.init,non.init))
           pick <- z.on[pick.pos]
           N.init <- model$N[1]
+          
           #get initial logprobs for N and y
           lp.initial.N <- model$getLogProb(N.node)
-          # lp.initial.y <- model$getLogProb(y.nodes[pick])
-          lp.initial.y <- 0 # changed
-          for(k in 1:K){ # changed
-            y.idx <- (pick-1)*K+k # changed
-            lp.initial.y <- lp.initial.y + model$getLogProb(y.nodes[y.idx]) # changed
-          } # changed
-
+          lp.initial.y <- 0
+          for(k in 1:K){
+            y.idx <- pick+(k-1)*M
+            lp.initial.y <- lp.initial.y + model$getLogProb(y.nodes[y.idx])
+          }
+          # lp.initial.s <- model$getLogProb(s.nodes[pick]) #cancels with reverse s proposal density
+          
           #propose new N/z
           model$N[1] <<-  model$N[1] - 1
           model$z[pick] <<- 0
-
-          #spatial process is gated by z; keep the off-state movement/use objects at zero
+          model$s[pick,1:2] <<- c(0,0) #set to zero when z=0
           model$avail.x[pick,1:n.cells.x] <<- rep(0,n.cells.x)
           model$avail.y[pick,1:n.cells.y] <<- rep(0,n.cells.y)
           model$use.denom[pick] <<- 0
-
+          
           #get proposed logprobs for N and y
           lp.proposed.N <- model$calculate(N.node)
-          # lp.proposed.y <- model$calculate(y.nodes[pick]) #will always be 0
-          lp.proposed.y <- 0 # changed
-          for(k in 1:K){ # changed
-            y.idx <- (pick-1)*K+k # changed
-            lp.proposed.y <- lp.proposed.y + model$calculate(y.nodes[y.idx]) #will always be 0 # changed
-          } # changed
-
+          #all y logProbs are 0 when z=0, so skip calculating them until acceptance
+          # lp.proposed.y <- 0
+          # for(k in 1:K){
+          #   y.idx <- pick+(k-1)*M
+          #   lp.proposed.y <- lp.proposed.y + model$calculate(y.nodes[y.idx])
+          # }
+          lp.proposed.y <- 0
+          # lp.proposed.s <- model$calculate(s.nodes[pick]) #is 0 for z=0; calculate after acceptance
+          
+          #s target and proposal terms cancel
+          # lp.initial.s <- model$getLogProb(s.nodes[pick])
+          # log.prop.back.s <- lp.initial.s
+          # lp.proposed.s <- 0
+          # log.prop.for.s <- 0
+          
           #MH step
-          #Restricting subtraction to undetected active individuals changes the cancellation
-          #between P(z|N)=1/choose(M,N) and the individual-selection probabilities.
-          #The remaining correction is non.init/N.init.
+          #combinatorial/proposal correction is non.init/N.init
+          #full ratio before s cancellation
+          # log_MH_ratio <- (lp.proposed.N + lp.proposed.y + lp.proposed.s) -
+          #   (lp.initial.N + lp.initial.y + lp.initial.s) + log(non.init/N.init) +
+          #   log.prop.back.s - log.prop.for.s
+          #omit s terms that cancel
           log_MH_ratio <- (lp.proposed.N + lp.proposed.y) - (lp.initial.N + lp.initial.y) + log(non.init/N.init)
           accept <- decide(log_MH_ratio)
-
+          
           if(accept) {
+            #y and s were intentionally not calculated before the MH decision where their values are known/cancel;
+            #calculate them now to synchronize accepted model logProbs
+            for(k in 1:K){
+              y.idx <- pick+(k-1)*M
+              model$calculate(y.nodes[y.idx])
+            }
+            model$calculate(s.nodes[pick])
             mvSaved["N",1][1] <<- model[["N"]]
             mvSaved["z",1][pick] <<- model[["z"]][pick]
+            mvSaved["s",1][pick,1:2] <<- model[["s"]][pick,1:2]
             mvSaved["avail.x",1][pick,1:n.cells.x] <<- model[["avail.x"]][pick,1:n.cells.x]
             mvSaved["avail.y",1][pick,1:n.cells.y] <<- model[["avail.y"]][pick,1:n.cells.y]
             mvSaved["use.denom",1][pick] <<- model[["use.denom"]][pick]
@@ -383,14 +439,10 @@ zSampler <- nimbleFunction(
           }else{
             model[["N"]] <<- mvSaved["N",1][1]
             model[["z"]][pick] <<- mvSaved["z",1][pick]
+            model[["s"]][pick,1:2] <<- mvSaved["s",1][pick,1:2]
             model[["avail.x"]][pick,1:n.cells.x] <<- mvSaved["avail.x",1][pick,1:n.cells.x]
             model[["avail.y"]][pick,1:n.cells.y] <<- mvSaved["avail.y",1][pick,1:n.cells.y]
             model[["use.denom"]][pick] <<- mvSaved["use.denom",1][pick]
-            # model$calculate(y.nodes[pick])
-            for(k in 1:K){ # changed
-              y.idx <- (pick-1)*K+k # changed
-              model$calculate(y.nodes[y.idx]) # changed
-            } # changed
             model$calculate(N.node)
           }
         }
@@ -401,16 +453,20 @@ zSampler <- nimbleFunction(
             pick.pos <- rcat(1,rep(1/noff.init,noff.init))
             pick <- z.off[pick.pos]
             N.init <- model$N[1]
+            
             #get initial logprobs for N and y
             lp.initial.N <- model$getLogProb(N.node)
             # lp.initial.y <- model$getLogProb(y.nodes[pick]) #will always be 0
             lp.initial.y <- 0
-
+            # lp.initial.s <- model$getLogProb(s.nodes[pick]) #will always be 0
+            
             #propose new N/z
             model$N[1] <<-  model$N[1] + 1
             model$z[pick] <<- 1
-
-            #construct the focal movement/use state directly when z is turned on, following JS z.super sampler
+            
+            #propose s from its dAC model prior when the individual is turned on
+            model$s[pick,1:2] <<- rAC(1,pi.cell=model$pi.cell[1:n.cells],res=res,
+                                      n.cells.x=n.cells.x,n.cells.y=n.cells.y,z=1)
             model$avail.x[pick,1:n.cells.x] <<- getAvail1D(s=model$s[pick,1],sigma=model$sigma[1],res=res,
                                                            vals.edges=x.vals.edges,n.cells=n.cells.x,
                                                            avail.z=avail.z,z=1)
@@ -421,24 +477,37 @@ zSampler <- nimbleFunction(
                                                   avail.x=model$avail.x[pick,1:n.cells.x],
                                                   avail.y=model$avail.y[pick,1:n.cells.y],
                                                   n.cells.x=n.cells.x,n.cells.y=n.cells.y,z=1)
-
+            
             #get proposed logprobs for N and y
             lp.proposed.N <- model$calculate(N.node)
-            # lp.proposed.y <- model$calculate(y.nodes[pick])
-            lp.proposed.y <- 0 # changed
-            for(k in 1:K){ # changed
-              y.idx <- (pick-1)*K+k # changed
-              lp.proposed.y <- lp.proposed.y + model$calculate(y.nodes[y.idx]) # changed
-            } # changed
-
+            lp.proposed.y <- 0
+            for(k in 1:K){
+              y.idx <- pick+(k-1)*M
+              lp.proposed.y <- lp.proposed.y + model$calculate(y.nodes[y.idx])
+            }
+            # lp.proposed.s <- model$calculate(s.nodes[pick]) #cancels with proposal, calculate afteracceptance
+            
+            #s target and proposal terms cancel 
+            # lp.proposed.s <- model$calculate(s.nodes[pick])
+            # log.prop.for.s <- lp.proposed.s
+            # lp.initial.s <- 0
+            # log.prop.back.s <- 0
+            
             #MH step
-            #Reverse subtraction selects only undetected active individuals. The remaining
-            #combinatorial/proposal correction is (N.init+1)/(non.curr+1).
+            #combinatorial/proposal correction is (N.init+1)/(non.curr+1)
+            #full ratio before s cancellation
+            # log_MH_ratio <- (lp.proposed.N + lp.proposed.y + lp.proposed.s) -
+            #   (lp.initial.N + lp.initial.y + lp.initial.s) + log((N.init+1)/(non.curr+1)) +
+            #   log.prop.back.s - log.prop.for.s
+            #omit s terms that cancel
             log_MH_ratio <- (lp.proposed.N + lp.proposed.y) - (lp.initial.N + lp.initial.y) + log((N.init+1)/(non.curr+1))
             accept <- decide(log_MH_ratio)
+            
             if(accept) {
+              model$calculate(s.nodes[pick])
               mvSaved["N",1][1] <<- model[["N"]]
               mvSaved["z",1][pick] <<- model[["z"]][pick]
+              mvSaved["s",1][pick,1:2] <<- model[["s"]][pick,1:2]
               mvSaved["avail.x",1][pick,1:n.cells.x] <<- model[["avail.x"]][pick,1:n.cells.x]
               mvSaved["avail.y",1][pick,1:n.cells.y] <<- model[["avail.y"]][pick,1:n.cells.y]
               mvSaved["use.denom",1][pick] <<- model[["use.denom"]][pick]
@@ -451,21 +520,22 @@ zSampler <- nimbleFunction(
             }else{
               model[["N"]] <<- mvSaved["N",1][1]
               model[["z"]][pick] <<- mvSaved["z",1][pick]
+              model[["s"]][pick,1:2] <<- mvSaved["s",1][pick,1:2]
               model[["avail.x"]][pick,1:n.cells.x] <<- mvSaved["avail.x",1][pick,1:n.cells.x]
               model[["avail.y"]][pick,1:n.cells.y] <<- mvSaved["avail.y",1][pick,1:n.cells.y]
               model[["use.denom"]][pick] <<- mvSaved["use.denom",1][pick]
-              # model$calculate(y.nodes[pick])
-              for(k in 1:K){ # changed
-                y.idx <- (pick-1)*K+k # changed
-                model$calculate(y.nodes[y.idx]) # changed
-              } # changed
+              #proposed y logProbs were calculated, so restore them after returning z to its saved state
+              for(k in 1:K){
+                y.idx <- pick+(k-1)*M
+                model$calculate(y.nodes[y.idx])
+              }
               model$calculate(N.node)
             }
           }
         }
       }
     }
-    #copy back to mySaved to update logProbs which was not done above
+    #copy back to mvSaved once to synchronize all calcNode values/logProbs
     copy(from = model, to = mvSaved, row = 1, nodes = calcNodes, logProb = TRUE)
   },
   methods = list( reset = function () {} )

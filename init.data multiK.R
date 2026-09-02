@@ -11,7 +11,7 @@ getCellR <- function(u,res,cells,xlim,ylim){
 init.data <- function(data=NA,M=NA,inits=NA){
   data <- c(data$constants,data$capture,data$telemetry) #restructure data list
   J <- data$J
-  K <- data$K # changed
+  K <- data$K
   xlim <- data$xlim
   ylim <- data$ylim
   cells <- data$cells
@@ -21,18 +21,14 @@ init.data <- function(data=NA,M=NA,inits=NA){
   res <- data$res 
   
   n <- nrow(data$y)
-  # y <- matrix(0,M,J)
-  # y[1:n,] <- data$y
-  y <- array(0,dim=c(M,K,J)) # changed
-  y[1:n,1:K,1:J] <- data$y # changed
+  y <- array(0,dim=c(M,K,J))
+  y[1:n,1:K,1:J] <- data$y
   #Initialize z, just using observed z's
   z.init <- c(rep(1,n),rep(0,M-n))
   s.init <- cbind(runif(M,xlim[1],xlim[2]),runif(M,ylim[1],ylim[2]))
   for(i in 1:M){
-    # if(sum(y[i,])>0){#if captured
-    if(sum(y[i,,])>0){#if captured # changed
-      # trapcaps <- which(y[i,]>0)
-      trapcaps <- which(colSums(y[i,,])>0) # changed
+    if(sum(y[i,,])>0){#if captured
+      trapcaps <- which(colSums(y[i,,])>0)
       if(length(trapcaps)>1){
         s.init[i,] <- colMeans(X[trapcaps,])
       }else{
@@ -50,11 +46,13 @@ init.data <- function(data=NA,M=NA,inits=NA){
       s.init[i,] <- dSS[pick,]
     }
   }
+  #z=0 individuals have activity centers set to 0
+  s.init[z.init==0,] <- 0 
   s.tel.init <- apply(data$u.tel,c(1,3),mean,na.rm=TRUE)
   #move any initialized outside state space
   for(i in 1:data$n.tel.inds){
     s.cell.init <- getCellR(s.tel.init[i,],res,cells,xlim,ylim)
-    if(InSS[s.cell.init]==0){#not in SS, move to nearest cell
+    if(InSS[s.cell.init]==0){ #not in SS, move to nearest cell
       dists <- sqrt((dSS[s.cell.init,1]-dSS[,1])^2+(dSS[s.cell.init,2]-dSS[,2])^2)
       dists[InSS==0] <- Inf
       pick <- which(dists==min(dists))[1] #if more than 1, just use first
