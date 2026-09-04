@@ -195,7 +195,7 @@ nt <- 2 #thinning rate
 start.time <- Sys.time()
 Rmodel <- nimbleModel(code=NimModel, constants=constants, data=Nimdata,check=FALSE,inits=Niminits)
 #tell nimble which nodes to configure so we don't waste time for samplers we will replace below
-config.nodes <- c('sigma','rsf.beta') #will add block updates for density and detection parameters below
+config.nodes <- c('beta0.lam','beta1.lam','sigma','rsf.beta') #will add block updates for density parameters below
 conf <- configureMCMC(Rmodel,monitors=parameters, thin=nt,nodes=config.nodes) 
 
 ###*required* N/z sampler
@@ -236,11 +236,9 @@ for(i in 1:data$constants$n.tel.inds){
 conf$addSampler(target = c("D0","D.beta1"),
                 type = 'AF_slice',control=list(adaptive=TRUE),silent = TRUE)
 
-#Add block AF_slice update, lam0 likelihoods cheap to compute in this model
-#may get slow with many occasions. if so, get independent samplers by putting these parameters in config.nodes
-#and/or switch to block RW update. If posteriors are still correlated. With many occasions, they may not be.
+#Add block RW update, if posteriors correlated. This was 2x as efficient as AF_slice in a few examples I looked at with 2 occasions
 conf$addSampler(target = c("beta0.lam","beta1.lam"),
-                type = 'AF_slice',control=list(adaptive=TRUE),silent = TRUE)
+                type = 'RW_block',control=list(adaptive=TRUE),silent = TRUE)
 
 # Build and compile
 Rmcmc <- buildMCMC(conf)
