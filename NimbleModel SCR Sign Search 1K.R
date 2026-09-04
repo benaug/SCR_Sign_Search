@@ -74,4 +74,4 @@ NimModel <- nimbleCode({
                                                       use.denom=use.denom.tel[i],
                                                       n.locs.ind=n.locs.ind[i])
   }
-})# end model
+})
